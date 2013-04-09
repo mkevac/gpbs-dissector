@@ -250,12 +250,13 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 
 	col_clear(pinfo->cinfo, COL_INFO);
 
+	col_set_str(pinfo->cinfo, COL_PROTOCOL, "GPBS");
 	if (is_request) {
-		col_set_str(pinfo->cinfo, COL_PROTOCOL, "GPBS request");
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%s", val_to_str(type, request_enum, "0x%02x"));
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%ld > %ld [%s]", pinfo->srcport, pinfo->destport,
+				val_to_str(type, request_enum, "0x%02x"));
 	} else if (is_response) {
-		col_set_str(pinfo->cinfo, COL_PROTOCOL, "GPBS response");
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%s", val_to_str(type, response_enum, "0x%02x"));
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%ld > %ld [%s]", pinfo->srcport, pinfo->destport,
+				val_to_str(type, response_enum, "0x%02x"));
 	}
 
 	if (tree) { /* we are being asked for details */
