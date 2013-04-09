@@ -1,0 +1,32 @@
+#
+# $Id: Custom.nmake.example 45172 2012-09-27 11:39:54Z etxrab $
+#
+
+include ..\config.nmake
+
+all: gpbs
+
+gpbs:: 
+	cd gpbs
+	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake
+	cd ..
+
+clean:
+	cd gpbs
+	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake clean
+	cd ..
+
+distclean: clean
+	cd gpbs
+	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake distclean
+	cd ..
+
+maintainer-clean: distclean
+	cd gpbs
+	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake maintainer-clean
+	cd ..
+
+install-plugins:
+!IFDEF ENABLE_LIBWIRESHARK
+	xcopy gpbs\*.dll ..\$(INSTALL_DIR)\plugins\$(VERSION) /d
+!ENDIF
