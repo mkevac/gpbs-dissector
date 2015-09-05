@@ -95,7 +95,7 @@ static size_t gpbs_field_storage_sz(ProtobufCType type)
 
 static void gpbs_unserialize_msg(ProtobufCMessage *m, proto_tree *gpbs_message_tree, tvbuff_t *tvb)
 {
-	int i;
+	unsigned i;
 	for (i = 0; i < m->descriptor->n_fields; i++) {
 		const ProtobufCFieldDescriptor *f = m->descriptor->fields + i;
 
@@ -118,8 +118,8 @@ static void gpbs_unserialize_msg(ProtobufCMessage *m, proto_tree *gpbs_message_t
 			unsigned r, offset = 0;
 
 			for (r = 0; r < *quantifier; r++) {
-				void *m = (* (char **) member) + offset;
-				gpbs_unserialize_field(f, m, gpbs_message_tree, tvb);
+				void *mm = (* (char **) member) + offset;
+				gpbs_unserialize_field(f, mm, gpbs_message_tree, tvb);
 				offset += field_sz;
 			}
 		}
@@ -146,9 +146,7 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 		case PROTOBUF_C_TYPE_ENUM:
 		{
 			int64_t v = * (int32_t *) m;
-			uint64_t u = * (uint32_t *) m;
-
-			int is_unsigned = (f->type == PROTOBUF_C_TYPE_UINT32 || f->type == PROTOBUF_C_TYPE_FIXED32);
+			/* uint64_t u = * (uint32_t *) m; */
 
 			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %ld", f->name, v);
 
@@ -156,7 +154,7 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 		}
 
 		case PROTOBUF_C_TYPE_BOOL:
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %ld", f->name, * (protobuf_c_boolean *) m);
+			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %d", f->name, * (protobuf_c_boolean *) m);
 			break;
 
 		case PROTOBUF_C_TYPE_INT64:
@@ -166,10 +164,6 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 		case PROTOBUF_C_TYPE_FIXED64:
 		{
 			int64_t v = * (int64_t *) m;
-			int64_t u = * (uint64_t *) m;
-
-			int as_string = 0;
-			int is_unsigned = (f->type == PROTOBUF_C_TYPE_UINT64 || f->type == PROTOBUF_C_TYPE_FIXED64);
 
 			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %ld", f->name, v);
 
@@ -190,7 +184,7 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 
 		case PROTOBUF_C_TYPE_MESSAGE:
 		{
-			ProtobufCMessage **msg = m;
+			ProtobufCMessage **msg = (ProtobufCMessage**)m;
 
 			proto_item *message_header_item;
 			proto_tree *gpbs_message_tree;
@@ -214,17 +208,20 @@ static void *get_message_descriptor(void *so, Google__Protobuf__FileDescriptorPr
 		value_string *enum_, int type)
 {
 	gchar *descriptor_func_name;
-	gchar *r_name;
+	const gchar *r_name;
+	gchar **splitted;
+	gchar *joined;
+	void *descriptor;
 
 	r_name = val_to_str_const(type, enum_, "unknown");
 
-	gchar **splitted = g_strsplit(fdp->package, ".", 10);
-	gchar *joined = g_strjoinv("__", splitted);
+	splitted = g_strsplit(fdp->package, ".", 10);
+	joined = g_strjoinv("__", splitted);
 
 	descriptor_func_name = g_strconcat(joined, "__", 
 			g_ascii_strdown(r_name, -1), "__descriptor", NULL);
 
-	void *descriptor = dlsym(so, descriptor_func_name);
+	descriptor = dlsym(so, descriptor_func_name);
 
 	g_strfreev(splitted);
 	g_free(joined);
@@ -238,6 +235,8 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 	gint offset = 0;
 	int is_request = 0;
 	int is_response = 0;
+	guint32 size;
+	guint32 type;
 
 	if (pinfo->srcport == gpbs_port_pref) {
 		is_response = 1;
@@ -245,17 +244,17 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 		is_request = 1;
 	}
 
-	guint32 size = tvb_get_ntohl(tvb, offset);
-	guint32 type = tvb_get_ntohl(tvb, offset+4);
+	size = tvb_get_ntohl(tvb, offset);
+	type = tvb_get_ntohl(tvb, offset+4);
 
 	col_clear(pinfo->cinfo, COL_INFO);
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "GPBS");
 	if (is_request) {
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%ld > %ld [%s]", pinfo->srcport, pinfo->destport,
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%d > %d [%s]", pinfo->srcport, pinfo->destport,
 				val_to_str(type, request_enum, "0x%02x"));
 	} else if (is_response) {
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%ld > %ld [%s]", pinfo->srcport, pinfo->destport,
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%d > %d [%s]", pinfo->srcport, pinfo->destport,
 				val_to_str(type, response_enum, "0x%02x"));
 	}
 
@@ -279,7 +278,9 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 			proto_tree_add_string(gpbs_tree, hf_gpbs_pdu_type_string, tvb, 0, 0, val_to_str(type, request_enum, "unknown"));
 		}
 		
-		if (size > 4) { /* message not empty */
+		if (size > 4 && gpbs_proto_so_handle) { /* message not empty */
+			ProtobufCMessageDescriptor *descriptor = NULL;
+			ProtobufCMessage *m;
 
 			proto_item *message_header_item;
 			proto_tree *gpbs_message_tree;
@@ -287,21 +288,19 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 			message_header_item = proto_tree_add_text(gpbs_tree, tvb, 9, 0, "GPBS message");
 			gpbs_message_tree = proto_item_add_subtree(message_header_item, ett_gpbs);
 
-			void *descriptor = NULL;
-
 			if (is_response) {
-				descriptor = get_message_descriptor(gpbs_proto_so_handle, gpbs_proto_fdp, response_enum, type);
+				descriptor = (ProtobufCMessageDescriptor*)get_message_descriptor(gpbs_proto_so_handle, gpbs_proto_fdp, response_enum, type);
 			}
 
 			if (is_request) {
-				descriptor = get_message_descriptor(gpbs_proto_so_handle, gpbs_proto_fdp, request_enum, type);
+				descriptor = (ProtobufCMessageDescriptor*)get_message_descriptor(gpbs_proto_so_handle, gpbs_proto_fdp, request_enum, type);
 			}
 
 			if (!descriptor) {
 				return;
 			}
 
-			ProtobufCMessage *m = protobuf_c_message_unpack(descriptor, 0, size-4, tvb_get_ptr(tvb, offset, size-4));
+			m = protobuf_c_message_unpack(descriptor, 0, size-4, tvb_get_ptr(tvb, offset, size-4));
 			if (!m) {
 				return;
 			}
@@ -312,41 +311,68 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 	}
 }
 
+static int dissect_gpbs_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+{
+    dissect_gpbs_message(tvb, pinfo, tree);
+    return tvb_length(tvb);
+}
+
 static guint get_gpbs_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset)
 {
+    (void)pinfo;
     return (guint)(tvb_get_ntohl(tvb, offset) + 4);
 }
 
-static void dissect_gpbs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+static int dissect_gpbs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    tcp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN, get_gpbs_message_len, dissect_gpbs_message);
+    tcp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN, get_gpbs_message_len, dissect_gpbs_pdu, data);
+    return tvb_length(tvb);
 }
 
 void proto_reg_handoff_gpbs(void)
 {
-	static dissector_handle_t gpbs_handle;
+	dissector_handle_t gpbs_handle;
+	const uint8_t *fds_data;
+	unsigned int *fds_len;
+	unsigned enum_no;
 
-	gpbs_handle = create_dissector_handle(dissect_gpbs, proto_gpbs);
+	/*
+	 * First time proto_reg_handoff_gpbs is called, we are given default values.
+	 * We will not work with default values, so we just exit and wait for a
+	 * second invocation.
+	 */
+	if (!gpbs_proto_so) {
+		return;
+	}
+
+	gpbs_handle = new_create_dissector_handle(dissect_gpbs, proto_gpbs);
+
 	dissector_add_uint("tcp.port", gpbs_port_pref, gpbs_handle);
 
 	gpbs_proto_so_handle = dlopen(gpbs_proto_so, RTLD_LAZY);
 	if (!gpbs_proto_so_handle) {
-		return; /* how to return some error? */
+		report_failure("dlopen(%s) failed", gpbs_proto_so);
+		return;
 	}
 
-	void *fds_data = dlsym(gpbs_proto_so_handle, "FileDescriptorSet");
+	fds_data = (const uint8_t *)dlsym(gpbs_proto_so_handle, "FileDescriptorSet");
 	if (!fds_data) {
-		return; /* how to return some error? */
+		dlclose(gpbs_proto_so_handle);
+		report_failure("dlsym(FileDescriptorSet) failed");
+		return;
 	}
 
-	unsigned int *fds_len = dlsym(gpbs_proto_so_handle, "FileDescriptorSet_len");
+	fds_len = (unsigned int *)dlsym(gpbs_proto_so_handle, "FileDescriptorSet_len");
 	if (!fds_len) {
-		return; /* how to return some error? */
+		dlclose(gpbs_proto_so_handle);
+		report_failure("dlsym(FileDescriptorSet_len) failed");
+		return;
 	}
 
 	gpbs_proto_fds = google__protobuf__file_descriptor_set__unpack(0, *fds_len, fds_data);
 	if (!gpbs_proto_fds) {
-		return; /* how to return some error? */
+		report_failure("google__protobuf__file_descriptor_set__unpack() failed");
+		return;
 	}
 
 	if (gpbs_proto_fds->n_file != 1) {
@@ -355,7 +381,6 @@ void proto_reg_handoff_gpbs(void)
 
 	gpbs_proto_fdp = gpbs_proto_fds->file[0];
 
-	unsigned enum_no;
 	for (enum_no = 0; enum_no < gpbs_proto_fdp->n_enum_type; enum_no++) {
 		unsigned value_no;
 
@@ -363,7 +388,7 @@ void proto_reg_handoff_gpbs(void)
 
 		if (!strcmp(enum_->name, "request_msgid")) {
 
-			request_enum = g_malloc(sizeof(value_string)*enum_->n_value);
+			request_enum = (value_string *)g_malloc(sizeof(value_string)*enum_->n_value);
 			request_enum_size = enum_->n_value;
 
 			for (value_no = 0; value_no < enum_->n_value; value_no++) {
@@ -374,44 +399,38 @@ void proto_reg_handoff_gpbs(void)
 		}
 
 		if (!strcmp(enum_->name, "response_msgid")) {
-			unsigned value_no;
+			unsigned value_no2;
 
-			response_enum = g_malloc(sizeof(value_string)*enum_->n_value);
+			response_enum = (value_string *)g_malloc(sizeof(value_string)*enum_->n_value);
 			response_enum_size = enum_->n_value;
 
-			for (value_no = 0; value_no < enum_->n_value; value_no++) {
-				Google__Protobuf__EnumValueDescriptorProto *value = enum_->value[value_no];
-				response_enum[value_no].value = value->number;
-				response_enum[value_no].strptr = value->name;
+			for (value_no2 = 0; value_no2 < enum_->n_value; value_no2++) {
+				Google__Protobuf__EnumValueDescriptorProto *value = enum_->value[value_no2];
+				response_enum[value_no2].value = value->number;
+				response_enum[value_no2].strptr = value->name;
 			}
 		}
 	}
 }
 
-void
-proto_register_gpbs(void)
+void proto_register_gpbs(void)
 {
+    g_message("proto_register_gpbs()");
+    module_t *gpbs_module;
 
     /* Setup protocol subtree array */
     static gint *ett[] = {
         &ett_gpbs
     };
 
-    proto_gpbs = proto_register_protocol (
-        "GPBS Protocol", /* name       */
-        "GPBS",      /* short name */
-        "gpbs"       /* abbrev     */
-        );
+    proto_gpbs = proto_register_protocol("GPBS Protocol", "GPBS", "gpbs");
 
     proto_register_field_array(proto_gpbs, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
-    module_t *gpbs_module;
-
     gpbs_module = prefs_register_protocol(proto_gpbs, proto_reg_handoff_gpbs);
-    prefs_register_uint_preference(gpbs_module, "tcp.port", "GPBS TCP Port",
-	 " GPBS TCP port if other than the default", 10, &gpbs_port_pref);
-    prefs_register_filename_preference(gpbs_module, "proto.so", "GPBS proto *.so",
-         " Path to *.so file for needed GPBS service", &gpbs_proto_so);
+
+    prefs_register_uint_preference(gpbs_module, "tcp.port", "GPBS TCP Port", "GPBS TCP port if other than the default", 10, &gpbs_port_pref);
+    prefs_register_filename_preference(gpbs_module, "proto.so", "GPBS proto *.so", "Path to *.so file for needed GPBS service", &gpbs_proto_so);
 }
 

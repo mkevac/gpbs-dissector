@@ -1,7 +1,5 @@
 # CMakeLists.txt
 #
-# $Id: CMakeLists.txt 34243 2010-09-24 20:41:34Z guy $
-#
 # Wireshark - Network traffic analyzer
 # By Gerald Combs <gerald@wireshark.org>
 # Copyright 1998 Gerald Combs
@@ -18,7 +16,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 
 set(DISSECTOR_SRC
@@ -54,6 +52,7 @@ add_library(gpbs ${LINK_MODE_MODULE}
 )
 set_target_properties(gpbs PROPERTIES PREFIX "")
 set_target_properties(gpbs PROPERTIES LINK_FLAGS "${WS_LINK_FLAGS}")
+set_target_properties(gpbs PROPERTIES FOLDER "Plugins")
 
 target_link_libraries(gpbs epan)
 

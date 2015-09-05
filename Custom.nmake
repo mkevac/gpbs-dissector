@@ -1,6 +1,4 @@
 #
-# $Id: Custom.nmake.example 45172 2012-09-27 11:39:54Z etxrab $
-#
 
 include ..\config.nmake
 
