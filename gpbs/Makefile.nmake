@@ -64,31 +64,20 @@ $(PLUGIN_NAME).dll $(PLUGIN_NAME).exp $(PLUGIN_NAME).lib : $(OBJECTS) $(LINK_PLU
 # pass only the first few names in the list to the shell, for some
 # reason.
 #
-# Therefore, we have a script to generate the plugin.c file.
-# The shell script runs slowly, as multiple greps and seds are run
-# for each input file; this is especially slow on Windows.  Therefore,
-# if Python is present (as indicated by PYTHON being defined), we run
-# a faster Python script to do that work instead.
-#
+# Therefore, we use a script to generate the register.c file.
 # The first argument is the directory in which the source files live.
 # The second argument is "plugin", to indicate that we should build
 # a plugin.c file for a plugin.
 # All subsequent arguments are the files to scan.
 #
-!IFDEF PYTHON
 plugin.c: $(REGISTER_SRC_FILES) moduleinfo.h Makefile.common ../../tools/make-dissector-reg.py
-	@echo Making plugin.c (using python)
+	@echo Making plugin.c
 	@$(PYTHON) "../../tools/make-dissector-reg.py" . plugin $(REGISTER_SRC_FILES)
-!ELSE
-plugin.c: $(REGISTER_SRC_FILES) moduleinfo.h Makefile.common ../../tools/make-dissector-reg
-	@echo Making plugin.c (using sh)
-	@$(SH) ../../tools/make-dissector-reg . plugin $(REGISTER_SRC_FILES)
-!ENDIF
 
 !ENDIF
 
 clean:
-	rm -f $(OBJECTS) $(RESOURCE) plugin.c *.pdb *.sbr \
+	rm -f $(OBJECTS) $(RESOURCE) plugin.c *.nativecodeanalysis.xml *.pdb *.sbr \
 	    $(PLUGIN_NAME).dll $(PLUGIN_NAME).dll.manifest $(PLUGIN_NAME).lib \
 	    $(PLUGIN_NAME).exp $(PLUGIN_NAME).rc
 

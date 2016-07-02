@@ -8,7 +8,9 @@
 #include <epan/prefs.h>
 #include <epan/dissectors/packet-tcp.h>
 
-static guint gpbs_port_pref = 11810;
+#include <wsutil/report_err.h>
+
+static guint gpbs_port_pref = 0;
 static const char *gpbs_proto_so = NULL;
 
 #define FRAME_HEADER_LEN 4
@@ -18,6 +20,9 @@ static int proto_gpbs = -1;
 static int hf_gpbs_pdu_type = -1;
 static int hf_gpbs_pdu_type_string = -1;
 static int hf_gpbs_pdu_length = -1;
+static int hf_gpbs_message_string = -1;
+
+static int hf_gpbs_field = -1;
 
 static gint ett_gpbs = -1;
 
@@ -50,6 +55,12 @@ static hf_register_info hf[] = {
 	{ &hf_gpbs_pdu_length,
 		{ "GPBS Length", "gpbs.length",
 			FT_UINT32, BASE_DEC,
+			NULL, 0x0,
+			NULL, HFILL }
+	},
+	{ &hf_gpbs_message_string,
+		{ "GPBS Message", "gpbs.message",
+			FT_STRING, BASE_NONE,
 			NULL, 0x0,
 			NULL, HFILL }
 	}
@@ -148,13 +159,13 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 			int64_t v = * (int32_t *) m;
 			/* uint64_t u = * (uint32_t *) m; */
 
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %ld", f->name, v);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %ld", f->name, v);
 
 			break;
 		}
 
 		case PROTOBUF_C_TYPE_BOOL:
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %d", f->name, * (protobuf_c_boolean *) m);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %d", f->name, * (protobuf_c_boolean *) m);
 			break;
 
 		case PROTOBUF_C_TYPE_INT64:
@@ -165,21 +176,21 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 		{
 			int64_t v = * (int64_t *) m;
 
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %ld", f->name, v);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %ld", f->name, v);
 
 			break;
 		}
 
 		case PROTOBUF_C_TYPE_FLOAT:
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %f", f->name, *(float *)m);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %f", f->name, *(float *)m);
 			break;
 
 		case PROTOBUF_C_TYPE_DOUBLE:
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %f", f->name, *(double *)m);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %f", f->name, *(double *)m);
 			break;
 
 		case PROTOBUF_C_TYPE_STRING:
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "%s: %s", f->name, *(char **)m);
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "%s: %s", f->name, *(char **)m);
 			break;
 
 		case PROTOBUF_C_TYPE_MESSAGE:
@@ -189,7 +200,7 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 			proto_item *message_header_item;
 			proto_tree *gpbs_message_tree;
 
-			message_header_item = proto_tree_add_text(gpbs_tree, tvb, 9, 0, "GPBS message %s", (*msg)->descriptor->name);
+			message_header_item = proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 9, 0, "data", "GPBS message %s", (*msg)->descriptor->name);
 			gpbs_message_tree = proto_item_add_subtree(message_header_item, ett_gpbs);
 
 			gpbs_unserialize_msg(*msg, gpbs_message_tree, tvb);
@@ -198,7 +209,7 @@ static void gpbs_unserialize_field(const ProtobufCFieldDescriptor *f, void *m, p
 
 		case PROTOBUF_C_TYPE_BYTES:
 		{
-			proto_tree_add_text(gpbs_tree, tvb, 0, 0, "some bytes");
+			proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 0, 0, "data", "some bytes");
 			break;
 		}
 	}
@@ -285,7 +296,7 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 			proto_item *message_header_item;
 			proto_tree *gpbs_message_tree;
 
-			message_header_item = proto_tree_add_text(gpbs_tree, tvb, 9, 0, "GPBS message");
+			message_header_item = proto_tree_add_string_format(gpbs_tree, hf_gpbs_message_string, tvb, 9, 0, "data", "GPBS message");
 			gpbs_message_tree = proto_item_add_subtree(message_header_item, ett_gpbs);
 
 			if (is_response) {
@@ -314,19 +325,20 @@ static void dissect_gpbs_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 static int dissect_gpbs_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     dissect_gpbs_message(tvb, pinfo, tree);
-    return tvb_length(tvb);
+    return tvb_captured_length(tvb);
 }
 
-static guint get_gpbs_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset)
+static guint get_gpbs_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset, void *arg)
 {
     (void)pinfo;
+    (void)arg;
     return (guint)(tvb_get_ntohl(tvb, offset) + 4);
 }
 
 static int dissect_gpbs(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     tcp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN, get_gpbs_message_len, dissect_gpbs_pdu, data);
-    return tvb_length(tvb);
+    return tvb_captured_length(tvb);
 }
 
 void proto_reg_handoff_gpbs(void)
@@ -341,7 +353,7 @@ void proto_reg_handoff_gpbs(void)
 	 * We will not work with default values, so we just exit and wait for a
 	 * second invocation.
 	 */
-	if (!gpbs_proto_so) {
+	if (!gpbs_proto_so || !strcmp(gpbs_proto_so, "")) {
 		return;
 	}
 
@@ -358,7 +370,7 @@ void proto_reg_handoff_gpbs(void)
 	fds_data = (const uint8_t *)dlsym(gpbs_proto_so_handle, "FileDescriptorSet");
 	if (!fds_data) {
 		dlclose(gpbs_proto_so_handle);
-		report_failure("dlsym(FileDescriptorSet) failed");
+		report_failure("dlsym(FileDescriptorSet) for '%s' failed", gpbs_proto_so);
 		return;
 	}
 
@@ -415,13 +427,14 @@ void proto_reg_handoff_gpbs(void)
 
 void proto_register_gpbs(void)
 {
-    g_message("proto_register_gpbs()");
     module_t *gpbs_module;
 
     /* Setup protocol subtree array */
     static gint *ett[] = {
         &ett_gpbs
     };
+
+    g_message("proto_register_gpbs()");
 
     proto_gpbs = proto_register_protocol("GPBS Protocol", "GPBS", "gpbs");
 

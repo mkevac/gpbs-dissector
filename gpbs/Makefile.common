@@ -33,6 +33,7 @@ NONGENERATED_C_FILES = \
 	$(NONGENERATED_REGISTER_C_FILES) \
 	protobuf-c.c \
 	descriptor.pb-c.c
+
 # Headers.
 CLEAN_HEADER_FILES = \
 	packet-gpbs.h
