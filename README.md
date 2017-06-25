@@ -1,5 +1,5 @@
 # gpbs-dissector
-wireshark dissector for gpbs protocol
+wireshark dissector for [Badoo](https://team.badoo.com/en-us/) internal gpbs protocol
 ## Building instructions
 Get wireshark code
 ```
